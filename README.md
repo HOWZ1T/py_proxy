@@ -1,7 +1,7 @@
 # py_proxy
-Python proxy helper. 
-Please use deligently and respectfully! 
-Always respect a websites ROBOTS.txt!
+Python proxy manager. <br>
+Please use diligently and respectfully. <br>
+Always respect a website's ROBOTS.txt
 
 ## compatibility
 This library is compatible with python 3
@@ -15,6 +15,12 @@ This library is dependant on:
 ```bash
 pip install py_proxy
 ```
+
+## features
+- Automatically fetches up to 80 proxies
+- Cycle between proxies easily
+- Test a proxy and get details about the proxy
+- Format proxies for use with requests library
 
 ## examples
 ```python
@@ -35,14 +41,23 @@ else:
 	
 # cycling the proxy to a new proxy from the pool
 proxy.cycle()
+
+# filtering proxies by a country code
+proxy = Proxy("US") #gets US only proxies from the pool
+
+#format a proxy for use with requests library
+ip = "100.100.100.100" #example ip, not real
+port = "1989" #example port, not real
+addr = [ip, port]
+proxies = proxy.format_proxy(addr) #returns the requests proxies dictionary
 ```
 
 ## license
 You're free to use this package which is licensed under the [MIT-LICENSE](LICENSE)
 
 ## contributing
-Contribution is always appreciated. 
-If you are contributing please remember to update the README.
+Contribution is always appreciated. <br>
+If you are contributing please remember to update the README. <br>
 If your contribution is accepted you will be credited for it.
 
 ## Author

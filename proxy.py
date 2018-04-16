@@ -2,20 +2,53 @@ from bs4 import BeautifulSoup
 import requests
 import sys
 
+FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "eg", "es", "fr", "gb", "gr", "hk",
+           "id", "il", "in", "it", "jp", "kr", "md", "mx", "nl", "ph", "pk", "pl", "ps", "ro", "ru", "se", "sg",
+           "sy", "th", "tr", "tw", "ua", "us", "uz", "ve", "vn", "ye", "za", "zm"]
+
 
 class Proxy:
-    def __init__(self):
+    def __init__(self, country_code="all"):
+        country_code = country_code.lower()
+
+        is_valid = False
+        for code in FILTERS:
+            if country_code == code:
+                is_valid = True
+                break
+
+        if is_valid:
+            self.filter = country_code
+        else:
+            print("bad filter given! country code: " + country_code + " is not valid!\ndefaulting to no filter")
+            self.filter = "all"
+
         self.index = 0
-        self.proxies = self.fetch_proxies()
-        self.proxy_count = len(self.proxies)
-        self.proxy = self.format_proxy(self.proxies[self.index])
+        self.proxies = self.fetch_proxies(self.filter)
+        if len(self.proxies) <= 0:
+            print("no proxies found! try using the 'all' filter")
+        else:
+            self.proxy_count = len(self.proxies)
+            self.proxy = self.format_proxy(self.proxies[self.index])
 
     def cycle(self):
         self.index = (self.index+1) % self.proxy_count
         self.proxy = self.format_proxy(self.proxies[self.index])
 
     @staticmethod
-    def fetch_proxies():
+    def fetch_proxies(country_="all"):
+        country_ = country_.lower()
+
+        is_valid = False
+        for code in FILTERS:
+            if country_ == code:
+                is_valid = True
+                break
+
+        if not is_valid:
+            print("bad filter given! country code: " + country_ + " is not valid!\ndefaulting to no filter")
+            country_ = "all"
+
         print("fetching proxies...")
         url = "https://free-proxy-list.net/"
         page = requests.get(url)
@@ -41,7 +74,7 @@ class Proxy:
                     https = parts[6].text
                     last_checked = parts[7].text
 
-                    if https == "yes":
+                    if https == "yes" and (country_ == "all" or country_ == country_code.lower()):
                         proxies.append([ip, port, country_code, country, provider, google, https, last_checked])
 
             print("retrieved " + str(len(proxies)) + " proxies")
@@ -71,10 +104,10 @@ class Proxy:
 
             ip = data[0].find("span").text
             location = data[1].text.split("[")[0]
-            device = data[3].text
-            os = data[4].text
-            browser = data[5].text
-            user_agent = data[6].text
+            device = data[4].text + ", " + data[3].text
+            os = data[5].text
+            browser = data[6].text
+            user_agent = data[7].text
 
             print("\n\nSuccess! Able to connect with proxy\nConnection Details:\nip: " + ip + "\nlocation: " + location)
             print("device: " + device + "\nos: " + os + "\nbrowser: " + browser + "\nuser agent: " + user_agent)
