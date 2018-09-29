@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import requests
 import sys
+from concurrent import futures
 
 FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "eg", "es", "fr", "gb", "gr", "hk",
            "id", "il", "in", "it", "jp", "kr", "md", "mx", "nl", "ph", "pk", "pl", "ps", "ro", "ru", "se", "sg",
@@ -31,9 +32,10 @@ class Proxy:
             self.proxy_count = len(self.proxies)
             self.proxy = self.format_proxy(self.proxies[self.index])
 
-    def cycle(self):
-        self.index = (self.index+1) % self.proxy_count
-        self.proxy = self.format_proxy(self.proxies[self.index])
+        #ready to be used with requests and validated.
+        self.validproxy = []
+        #validate and fill up the list
+        self._validate_proxies()
 
     @staticmethod
     def fetch_proxies(country_="all"):
@@ -80,6 +82,18 @@ class Proxy:
             print("retrieved " + str(len(proxies)) + " proxies")
             return proxies
 
+    def _test_proxy_multiplereturn(self, proxy_):
+        res = self.test_proxy(proxy_)
+        return (res, proxy_)
+
+    def _validate_proxies(self):
+        print("Attempting to validate {} proxies.".format(len(self.proxies)))
+        formatted_proxies = [self.format_proxy(p) for p in self.proxies]
+        with futures.ThreadPoolExecutor(max_workers=128) as exc:
+            for (res, prx) in exc.map(self._test_proxy_multiplereturn, formatted_proxies):
+                if res == 1:
+                    self.validproxy.append(prx)
+
     @staticmethod
     def format_proxy(proxy):
         http = "http://" + proxy[0] + ":" + proxy[1]
@@ -88,7 +102,6 @@ class Proxy:
             "http": http,
             "https": https
         }
-
         return proxy_dict
 
     @staticmethod
