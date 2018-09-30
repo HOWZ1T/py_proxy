@@ -2,6 +2,7 @@
 Python proxy manager. <br>
 Please use diligently and respectfully. <br>
 Always respect a website's ROBOTS.txt
+This fork automatically validates returned proxies using threading. Easier to use.
 
 ## compatibility
 This library is compatible with python 3
@@ -28,28 +29,7 @@ from proxy import Proxy
 
 proxy = Proxy()
 
-# getting the current proxy
-cur_proxy = proxy.proxy
-
-# testing the current proxy
-res = proxy.test_proxy(cur_proxy)
-
-if res == 1:
-	print("success!")
-else:
-	print("failure!")
-	
-# cycling the proxy to a new proxy from the pool
-proxy.cycle()
-
-# filtering proxies by a country code
-proxy = Proxy("US") #gets US only proxies from the pool
-
-#format a proxy for use with requests library
-ip = "100.100.100.100" #example ip, not real
-port = "1989" #example port, not real
-addr = [ip, port]
-proxies = proxy.format_proxy(addr) #returns the requests proxies dictionary
+validproxiees = proxy.validproxy
 ```
 
 ## license
@@ -60,5 +40,5 @@ Contribution is always appreciated. <br>
 If you are contributing please remember to update the README. <br>
 If your contribution is accepted you will be credited for it.
 
-## Author
+## Original Author
 [Dylan Randall aka HOWZ1T](https://github.com/howz1t)
