@@ -1,7 +1,8 @@
 from bs4 import BeautifulSoup
 import requests
 import sys
-from concurrent import futures
+import threading
+
 
 FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "eg", "es", "fr", "gb", "gr", "hk",
            "id", "il", "in", "it", "jp", "kr", "md", "mx", "nl", "ph", "pk", "pl", "ps", "ro", "ru", "se", "sg",
@@ -10,6 +11,9 @@ FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "e
 
 class Proxy:
     def __init__(self, country_code="all"):
+
+        self.session = requests.Session()
+
         country_code = country_code.lower()
 
         is_valid = False
@@ -34,8 +38,9 @@ class Proxy:
 
         #ready to be used with requests and validated.
         self.validproxy = []
+        self.lock = threading.Lock()
         #validate and fill up the list
-        self._validate_proxies()
+        self._thr_validate_proxies(chunksize=8)
 
     @staticmethod
     def fetch_proxies(country_="all"):
@@ -82,17 +87,34 @@ class Proxy:
             print("retrieved " + str(len(proxies)) + " proxies")
             return proxies
 
-    def _test_proxy_multiplereturn(self, proxy_):
-        res = self.test_proxy(proxy_)
-        return (res, proxy_)
+    def _thr_test(self, proxy_):
+        res = self._test_proxy(proxy_)
+        if res == 1:
+            self.lock.acquire()
+            try:
+                self.validproxy.append(proxy_)
+            finally:
+                self.lock.release()
 
-    def _validate_proxies(self):
-        print("Attempting to validate {} proxies.".format(len(self.proxies)))
+    def _thr_multi_test(self, plist):
+        for p in plist:
+            self._thr_test(p)
+
+    def _thr_validate_proxies(self, chunksize=8):
+        def _chunks(l, n):
+            for i in range(0, len(l), n):
+                yield l[i:i+n]
         formatted_proxies = [self.format_proxy(p) for p in self.proxies]
-        with futures.ThreadPoolExecutor(max_workers=128) as exc:
-            for (res, prx) in exc.map(self._test_proxy_multiplereturn, formatted_proxies):
-                if res == 1:
-                    self.validproxy.append(prx)
+        chunklist = list(_chunks(formatted_proxies, chunksize))
+        tlist = []
+        for i in range(0, len(chunklist)):
+            task = threading.Thread(target=self._thr_multi_test, args=(chunklist[i], ))
+            tlist.append(task)
+        for t in tlist:
+            t.start()
+        for t in tlist:
+            t.join()
+
 
     @staticmethod
     def format_proxy(proxy):
@@ -105,25 +127,27 @@ class Proxy:
         return proxy_dict
 
     @staticmethod
-    def test_proxy(proxy_):
+    def _test_proxy(proxy_):
         url = "https://www.iplocation.net/find-ip-address"
         print("testing proxy...")
         try:
             page = requests.get(url, proxies=proxy_)
             soup = BeautifulSoup(page.content, "html.parser")
+            try:
+                ip_tbl = soup.find("table", {"class": "iptable"})
+                data = ip_tbl.find_all("td")
 
-            ip_tbl = soup.find("table", {"class": "iptable"})
-            data = ip_tbl.find_all("td")
+                ip = data[0].find("span").text
+                location = data[1].text.split("[")[0]
+                device = data[4].text + ", " + data[3].text
+                os = data[5].text
+                browser = data[6].text
+                user_agent = data[7].text
 
-            ip = data[0].find("span").text
-            location = data[1].text.split("[")[0]
-            device = data[4].text + ", " + data[3].text
-            os = data[5].text
-            browser = data[6].text
-            user_agent = data[7].text
-
-            print("\n\nSuccess! Able to connect with proxy\nConnection Details:\nip: " + ip + "\nlocation: " + location)
-            print("device: " + device + "\nos: " + os + "\nbrowser: " + browser + "\nuser agent: " + user_agent)
+                print("\n\nSuccess! Able to connect with proxy\nConnection Details:\nip: " + ip + "\nlocation: " + location)
+                print("device: " + device + "\nos: " + os + "\nbrowser: " + browser + "\nuser agent: " + user_agent)
+            except AttributeError:
+                print("Something went wrong.")
             return 1
         except requests.exceptions.ProxyError:
             print("request caused a proxy error!")
