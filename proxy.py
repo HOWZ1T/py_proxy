@@ -10,10 +10,8 @@ FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "e
 
 
 class Proxy:
-    def __init__(self, country_code="all"):
-
+    def __init__(self, country_code="all", validate_proxies=False):
         self.session = requests.Session()
-
         country_code = country_code.lower()
 
         is_valid = False
@@ -36,11 +34,33 @@ class Proxy:
             self.proxy_count = len(self.proxies)
             self.proxy = self.format_proxy(self.proxies[self.index])
 
-        #ready to be used with requests and validated.
-        self.validproxy = []
-        self.lock = threading.Lock()
-        #validate and fill up the list
-        self._thr_validate_proxies(chunksize=8)
+        self.valid_proxies = []
+        self.lock = threading.Lock()  # ready to be used with requests and validated.
+
+        # giving start-up proxy validation control to the user
+        if validate_proxies:
+
+            if len(self.proxies) > 0:
+                # validate and fill up the list
+                self._thr_validate_proxies(chunksize=8)
+
+    # allows the user to cycle through proxies
+    def cycle(self, valid_only=False):
+        if valid_only:
+            if len(self.valid_proxies) > 0:
+                idx = (self.index+1) % len(self.valid_proxies)
+                prx = self.valid_proxies[idx]
+
+                if prx is not None:
+                    self.index = idx
+                    self.proxy = self.format_proxy(prx)
+                else:
+                    print("no valid proxies to cycle through! try the 'validate_proxies' method first.")
+            else:
+                print("no valid proxies to cycle through! try the 'validate_proxies' method first.")
+        else:
+            self.index = (self.index+1) % self.proxy_count
+            self.proxy = self.format_proxy(self.proxies[self.index])
 
     @staticmethod
     def fetch_proxies(country_="all"):
@@ -87,12 +107,20 @@ class Proxy:
             print("retrieved " + str(len(proxies)) + " proxies")
             return proxies
 
+    def validate_proxies(self, chunksize=8):
+        if len(self.proxies) <= 0:
+            print("there are no proxies to validate.")
+            return
+
+        print("validating proxies...")
+        self._thr_validate_proxies(chunksize=chunksize)
+
     def _thr_test(self, proxy_):
-        res = self._test_proxy(proxy_)
+        res = self.test_proxy(proxy_)
         if res == 1:
             self.lock.acquire()
             try:
-                self.validproxy.append(proxy_)
+                self.valid_proxies.append(proxy_)
             finally:
                 self.lock.release()
 
@@ -104,20 +132,24 @@ class Proxy:
         def _chunks(l, n):
             for i in range(0, len(l), n):
                 yield l[i:i+n]
+
         formatted_proxies = [self.format_proxy(p) for p in self.proxies]
-        chunklist = list(_chunks(formatted_proxies, chunksize))
+        chunk_list = list(_chunks(formatted_proxies, chunksize))
         tlist = []
-        for i in range(0, len(chunklist)):
-            task = threading.Thread(target=self._thr_multi_test, args=(chunklist[i], ))
+
+        for i in range(0, len(chunk_list)):
+            task = threading.Thread(target=self._thr_multi_test, args=(chunk_list[i], ))
             tlist.append(task)
         for t in tlist:
             t.start()
         for t in tlist:
             t.join()
 
-
     @staticmethod
     def format_proxy(proxy):
+        if isinstance(proxy, dict):  # checking if proxy is already formatted
+            return proxy
+
         http = "http://" + proxy[0] + ":" + proxy[1]
         https = "https://" + proxy[0] + ":" + proxy[1]
         proxy_dict = {
@@ -127,28 +159,33 @@ class Proxy:
         return proxy_dict
 
     @staticmethod
-    def _test_proxy(proxy_):
+    def test_proxy(proxy_, verbose=False):
         url = "https://www.iplocation.net/find-ip-address"
-        print("testing proxy...")
+        if verbose:
+            print("testing proxy...")
         try:
             page = requests.get(url, proxies=proxy_)
             soup = BeautifulSoup(page.content, "html.parser")
-            try:
-                ip_tbl = soup.find("table", {"class": "iptable"})
-                data = ip_tbl.find_all("td")
 
-                ip = data[0].find("span").text
-                location = data[1].text.split("[")[0]
-                device = data[4].text + ", " + data[3].text
-                os = data[5].text
-                browser = data[6].text
-                user_agent = data[7].text
+            ip_tbl = soup.find("table", {"class": "iptable"})
+            data = ip_tbl.find_all("td")
 
+            ip = data[0].find("span").text
+            location = data[1].text.split("[")[0]
+            device = data[4].text + ", " + data[3].text
+            os = data[5].text
+            browser = data[6].text
+            user_agent = data[7].text
+
+            if verbose:
                 print("\n\nSuccess! Able to connect with proxy\nConnection Details:\nip: " + ip + "\nlocation: " + location)
                 print("device: " + device + "\nos: " + os + "\nbrowser: " + browser + "\nuser agent: " + user_agent)
-            except AttributeError:
-                print("Something went wrong.")
             return 1
         except requests.exceptions.ProxyError:
-            print("request caused a proxy error!")
+            if verbose:
+                print("request caused a proxy error!")
+            return 0
+        except AttributeError:
+            if verbose:
+                print("Something went wrong.")
             return 0
