@@ -2,6 +2,7 @@ from bs4 import BeautifulSoup
 import requests
 import sys
 import threading
+import logging
 
 
 FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "eg", "es", "fr", "gb", "gr", "hk",
@@ -11,6 +12,7 @@ FILTERS = ["all", "au", "bd", "br", "by", "ca", "co", "cz", "de", "do", "ec", "e
 
 class Proxy:
     def __init__(self, country_code="all", validate_proxies=False):
+        self.logger = logging.getLogger('py_proxy.proxy.Proxy')
         self.session = requests.Session()
         country_code = country_code.lower()
 
@@ -23,13 +25,13 @@ class Proxy:
         if is_valid:
             self.filter = country_code
         else:
-            print("bad filter given! country code: " + country_code + " is not valid!\ndefaulting to no filter")
+            self.logger.info("bad filter given! country code: " + country_code + " is not valid!\ndefaulting to no filter")
             self.filter = "all"
 
         self.index = 0
         self.proxies = self.fetch_proxies(self.filter)
         if len(self.proxies) <= 0:
-            print("no proxies found! try using the 'all' filter")
+            self.logger.error("no proxies found! try using the 'all' filter")
         else:
             self.proxy_count = len(self.proxies)
             self.proxy = self.format_proxy(self.proxies[self.index])
@@ -55,15 +57,14 @@ class Proxy:
                     self.index = idx
                     self.proxy = self.format_proxy(prx)
                 else:
-                    print("no valid proxies to cycle through! try the 'validate_proxies' method first.")
+                    self.logger.error("no valid proxies to cycle through! try the 'validate_proxies' method first.")
             else:
-                print("no valid proxies to cycle through! try the 'validate_proxies' method first.")
+                self.logger.error("no valid proxies to cycle through! try the 'validate_proxies' method first.")
         else:
             self.index = (self.index+1) % self.proxy_count
             self.proxy = self.format_proxy(self.proxies[self.index])
 
-    @staticmethod
-    def fetch_proxies(country_="all"):
+    def fetch_proxies(self, country_="all"):
         country_ = country_.lower()
 
         is_valid = False
@@ -73,18 +74,18 @@ class Proxy:
                 break
 
         if not is_valid:
-            print("bad filter given! country code: " + country_ + " is not valid!\ndefaulting to no filter")
+            self.logger.error("bad filter given! country code: " + country_ + " is not valid!\ndefaulting to no filter")
             country_ = "all"
 
-        print("fetching proxies...")
+        self.logger.info("fetching proxies...")
         url = "https://free-proxy-list.net/"
         page = requests.get(url)
 
         if page.status_code != 200:
-            print("Couldn't fetch proxies list! received bad response with code: " + str(page.status_code))
+            self.logger.error("Couldn't fetch proxies list! received bad response with code: " + str(page.status_code))
             sys.exit(1)
         else:
-            print("parsing data...")
+            self.logger.info("parsing data...")
             soup = BeautifulSoup(page.content, "html.parser")
             rows = soup.find_all("tr")
 
@@ -104,15 +105,15 @@ class Proxy:
                     if https == "yes" and (country_ == "all" or country_ == country_code.lower()):
                         proxies.append([ip, port, country_code, country, provider, google, https, last_checked])
 
-            print("retrieved " + str(len(proxies)) + " proxies")
+            self.logger.info("retrieved " + str(len(proxies)) + " proxies")
             return proxies
 
     def validate_proxies(self, chunksize=8):
         if len(self.proxies) <= 0:
-            print("there are no proxies to validate.")
+            self.logger.info("there are no proxies to validate.")
             return
 
-        print("validating proxies...")
+        self.logger.info("validating proxies...")
         self._thr_validate_proxies(chunksize=chunksize)
 
     def _thr_test(self, proxy_):
@@ -158,11 +159,10 @@ class Proxy:
         }
         return proxy_dict
 
-    @staticmethod
-    def test_proxy(proxy_, verbose=False):
+    def test_proxy(self, proxy_, verbose=False):
         url = "https://www.iplocation.net/find-ip-address"
         if verbose:
-            print("testing proxy...")
+            self.logger.info("testing proxy...")
         try:
             page = requests.get(url, proxies=proxy_)
             soup = BeautifulSoup(page.content, "html.parser")
@@ -178,14 +178,14 @@ class Proxy:
             user_agent = data[7].text
 
             if verbose:
-                print("\n\nSuccess! Able to connect with proxy\nConnection Details:\nip: " + ip + "\nlocation: " + location)
-                print("device: " + device + "\nos: " + os + "\nbrowser: " + browser + "\nuser agent: " + user_agent)
+                self.logger.info("\n\nSuccess! Able to connect with proxy\nConnection Details:\nip: " + ip + "\nlocation: " + location)
+                self.logger.info("device: " + device + "\nos: " + os + "\nbrowser: " + browser + "\nuser agent: " + user_agent)
             return 1
         except requests.exceptions.ProxyError:
             if verbose:
-                print("request caused a proxy error!")
+                self.logger.error("request caused a proxy error!")
             return 0
         except AttributeError:
             if verbose:
-                print("Something went wrong.")
+                self.logger.error("Something went wrong.")
             return 0
